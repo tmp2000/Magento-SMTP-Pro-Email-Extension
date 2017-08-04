@@ -9,6 +9,10 @@
  */
 class Aschroder_SMTPPro_Model_Email_Queue extends Mage_Core_Model_Email_Queue {
 
+    protected $finalSMTPcodesForEmail = [
+        401, 432, 441, 450, 510, 511, 512, 513, 521, 523, 530, 541, 550, 551, 553, 555
+    ];
+
     // As per parent class - except addition of before and after send events
     public function send()
     {
@@ -123,13 +127,20 @@ class Aschroder_SMTPPro_Model_Email_Queue extends Mage_Core_Model_Email_Queue {
                     unset($mailer);
                     $oldDevMode = Mage::getIsDeveloperMode();
                     Mage::setIsDeveloperMode(true);
-                    Mage::logException($e);
-                    Mage::setIsDeveloperMode($oldDevMode);
 
-                    // 553 - Requested action not taken: mailbox name not allowed
-                    if ($e instanceof Zend_Mail_Protocol_Exception && $e->getCode() != 553) {
+                    Mage::logException($e);
+
+                    // if SMTP code not final for email, stop queue
+                    if ($e instanceof Zend_Mail_Protocol_Exception &&
+                        $transport->getTransport() instanceof Zend_Mail_Transport_Smtp &&
+                        !in_array($e->getCode(), $this->finalSMTPcodesForEmail)
+                    ) {
+                        Mage::logException(new Exception('Email Queue was stopped with error code - ' . $e->getCode()));
+                        Mage::setIsDeveloperMode($oldDevMode);
                         return false;
                     }
+
+                    Mage::setIsDeveloperMode($oldDevMode);
 
                     $message->setProcessedAt(Varien_Date::formatDate(true));
                     $message->save();
